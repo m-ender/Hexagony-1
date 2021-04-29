@@ -1,29 +1,33 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Numerics;
 using System.Text;
 using RT.Util;
 
 namespace Hexagony
 {
-    class HexagonyEnv
+    public class HexagonyEnv
     {
         private readonly Memory _memory = new();
         private readonly Grid _grid;
         private readonly PointAxial[] _ips;
         private readonly Direction[] _ipDirs;
         private readonly Stream _inputStream;
-        private readonly int _debugLevel;
         private int _activeIp;
         private int _tick;
         private int? _nextByte;
 
-        public HexagonyEnv(string source, Stream inputStream, int debugLevel)
+        public int? MaxTicks { get; set; }
+        public string TargetOutput { get; set; }
+        public int OutputLength { get; private set; }
+        public bool Success { get; private set; } = true;
+
+        public bool TimedOut => MaxTicks.HasValue && _tick >= MaxTicks;
+
+        public HexagonyEnv(string source, Stream inputStream)
         {
             _grid = Grid.Parse(source);
             _inputStream = inputStream;
-            _debugLevel = debugLevel;
             _ips = Ut.NewArray(
                 new PointAxial(0, -_grid.Size + 1),
                 new PointAxial(_grid.Size - 1, -_grid.Size + 1),
@@ -40,6 +44,27 @@ namespace Hexagony
                 Direction.NorthEast);
         }
 
+        public HexagonyEnv(HexagonyEnv other)
+        {
+            _memory = new Memory(other._memory);
+            _grid = new Grid(other._grid);
+            _ips = (PointAxial[])other._ips.Clone();
+            _ipDirs = (Direction[])other._ipDirs.Clone();
+            _inputStream = other._inputStream; // This wouldn't really work if we had any input.
+            _activeIp = other._activeIp;
+            _tick = other._tick;
+            _nextByte = other._nextByte;
+            MaxTicks = other.MaxTicks;
+            TargetOutput = other.TargetOutput;
+            OutputLength = other.OutputLength;
+            Success = other.Success;
+        }
+
+        public void ReplaceSource(Rune[] source)
+        {
+            _grid.ReplaceSource(source);
+        }
+
         public void Run()
         {
             foreach (var _ in GetProgram())
@@ -50,28 +75,18 @@ namespace Hexagony
         private Direction Dir => _ipDirs[_activeIp];
         private PointAxial Coords => _ips[_activeIp];
 
-        private IEnumerable<Position> GetProgram()
+        private IEnumerable<int> GetProgram()
         {
             if (_grid.Size == 0)
                 yield break;
 
             while (true)
             {
-                yield return _grid.GetPosition(Coords);
+                yield return 0;
 
                 // Execute the current instruction
                 var newIp = _activeIp;
-                var (opcode, debug) = _grid[Coords];
-                var debugTick = _debugLevel > 1 || (_debugLevel == 1 && debug);
-
-                if (debugTick)
-                {
-                    OutputDebugInfo(opcode);
-                    if (opcode.Value == '@')
-                    {
-                        OutputDebugLine(_memory.ToDebugString());
-                    }
-                }
+                var opcode = _grid[Coords];
 
                 switch (opcode.Value)
                 {
@@ -79,7 +94,7 @@ namespace Hexagony
                     case '.': break;
 
                     // Terminate
-                    case '@': yield break;
+                    case '@': Terminate(); yield break;
 
                     // Arithmetic
                     case ')': _memory.Set(_memory.Get() + 1); break;
@@ -93,7 +108,14 @@ namespace Hexagony
                     case '%':
                         var leftVal = _memory.GetLeft();
                         var rightVal = _memory.GetRight();
-                        var div = BigInteger.DivRem(leftVal, rightVal, out var rem);
+
+                        if (rightVal == 0)
+                        {
+                            Terminate();
+                            yield break;
+                        }
+
+                        var div = Math.DivRem(leftVal, rightVal, out var rem);
                         // The semantics of integer division and modulo are different in Hexagony because the
                         // reference interpreter was written in Ruby. Account for this discrepancy.
                         if (rem != 0 && leftVal < 0 ^ rightVal < 0)
@@ -127,6 +149,8 @@ namespace Hexagony
 
                     case ';':
                         AppendOutput((char)(((int)(_memory.Get() % 256) + 256) % 256));
+                        if (!Success)
+                            yield break;
                         break;
 
                     case '?':
@@ -134,7 +158,9 @@ namespace Hexagony
                         break;
 
                     case '!':
-                        AppendOutput(_memory.Get().ToString());
+                        AppendOutput(_memory.Get());
+                        if (!Success)
+                            yield break;
                         break;
 
                     // Control flow
@@ -162,22 +188,27 @@ namespace Hexagony
                         break;
                 }
 
-                if (debugTick)
-                {
-                    OutputDebugLine($"New direction: {Dir}");
-                    OutputDebugLine(_memory.ToDebugString());
-                }
-
                 _ips[_activeIp] += Dir.Vector;
                 HandleEdges();
                 _activeIp = newIp;
                 _tick++;
+
+                if (TimedOut)
+                    yield break;
             }
         }
 
-        private BigInteger FindInteger()
+        private void Terminate()
         {
-            var value = BigInteger.Zero;
+            if (TargetOutput is null)
+                return;
+
+            Success = OutputLength == TargetOutput.Length;
+        }
+
+        private long FindInteger()
+        {
+            long value = 0;
             var positive = true;
 
             while (true)
@@ -261,11 +292,41 @@ namespace Hexagony
             }
         }
 
-        private void AppendOutput(char output) =>
-            Console.Write(output);
+        private void AppendOutput(char output)
+        {
+            if (TargetOutput is null)
+            {
+                Console.Write(output);
+                ++OutputLength;
+                return;
+            }
 
-        private void AppendOutput(string output) =>
-            Console.Write(output);
+            if (OutputLength >= TargetOutput.Length)
+            {
+                if (output == '\n')
+                    return;
+
+                Success = false;
+                return;
+            }
+
+            if (TargetOutput[OutputLength] != output)
+            {
+                if (TargetOutput[OutputLength] == '\n' && output == ' ')
+                    return;
+
+                Success = false;
+                return;
+            }
+
+            ++OutputLength;
+        }
+
+        private void AppendOutput(long output)
+        {
+            foreach (char character in output.ToString())
+                AppendOutput(character);
+        }
 
         private void OutputDebugLine(string output) =>
             Console.Error.WriteLine(output);

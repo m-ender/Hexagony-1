@@ -1,17 +1,26 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using System.Text;
 
 namespace Hexagony
 {
     class Memory
     {
-        private readonly Dictionary<(PointAxial point, Direction dir), BigInteger> _edges = new();
+        private readonly Dictionary<(PointAxial point, Direction dir), long> _edges = new();
         private PointAxial _mp;
         private Direction _dir = Direction.East;
         private bool _cw;
+
+        public Memory() { }
+
+        public Memory(Memory other)
+        {
+            _edges = new(other._edges);
+            _mp = other._mp;
+            _dir = other._dir;
+            _cw = other._cw;
+        }
 
         public void Reverse() { _cw = !_cw; }
 
@@ -19,21 +28,21 @@ namespace Hexagony
 
         public void MoveRight() => (_mp, _dir, _cw) = RightIndex;
 
-        public void Set(BigInteger value) => _edges[(_mp, _dir)] = value;
+        public void Set(long value) => _edges[(_mp, _dir)] = value;
 
-        public BigInteger Get() =>
-            _edges.TryGetValue((_mp, _dir), out var value) ? value : BigInteger.Zero;
+        public long Get() =>
+            _edges.TryGetValue((_mp, _dir), out var value) ? value : 0;
 
-        public BigInteger GetLeft()
+        public long GetLeft()
         {
             var index = LeftIndex;
-            return _edges.TryGetValue((index.point, index.dir), out var value) ? value : BigInteger.Zero;
+            return _edges.TryGetValue((index.point, index.dir), out var value) ? value : 0;
         }
 
-        public BigInteger GetRight()
+        public long GetRight()
         {
             var index = RightIndex;
-            return _edges.TryGetValue((index.point, index.dir), out var value) ? value : BigInteger.Zero;
+            return _edges.TryGetValue((index.point, index.dir), out var value) ? value : 0;
         }
 
         private (PointAxial point, Direction dir, bool cw) LeftIndex
@@ -111,7 +120,7 @@ namespace Hexagony
         private static string FormatPosition(PointAxial p, Direction dir) =>
             $"(Q: {p.Q,3}, R: {p.R,3}, Dir: {dir,2})";
 
-        private string FormatValue(PointAxial p, Direction dir, BigInteger value) =>
+        private string FormatValue(PointAxial p, Direction dir, long value) =>
             $"{FormatPosition(p, dir)}: {value,6}" + (_mp == p && _dir == dir ? " (active)" : null);
     }
 }

@@ -110,8 +110,8 @@ namespace Hexagony
                     Console.OpenStandardInput() :
                     new MemoryStream(new byte[0]);
 
-            var debugLevel = options.DebugAll ? 2 : options.Debug ? 1 : 0;
-            var environment = new HexagonyEnv(code, inputStream, debugLevel);
+            //var debugLevel = options.DebugAll ? 2 : options.Debug ? 1 : 0;
+            var environment = new HexagonyEnv(code, inputStream);
 
             try
             {
