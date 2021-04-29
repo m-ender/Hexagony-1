@@ -8,7 +8,7 @@ namespace Hexagony
 {
     public class HexagonyEnv
     {
-        private readonly Memory _memory = new();
+        private readonly Memory _memory;
         private readonly Grid _grid;
         private readonly PointAxial[] _ips;
         private readonly Direction[] _ipDirs;
@@ -26,6 +26,7 @@ namespace Hexagony
 
         public HexagonyEnv(string source, Stream inputStream)
         {
+            _memory = new();
             _grid = Grid.Parse(source);
             _inputStream = inputStream;
             _ips = Ut.NewArray(
@@ -44,12 +45,17 @@ namespace Hexagony
                 Direction.NorthEast);
         }
 
-        public HexagonyEnv(HexagonyEnv other)
+        public HexagonyEnv(HexagonyEnv other, Rune[] newSource)
         {
             _memory = new Memory(other._memory);
-            _grid = new Grid(other._grid);
-            _ips = (PointAxial[])other._ips.Clone();
-            _ipDirs = (Direction[])other._ipDirs.Clone();
+            _grid = new Grid(other._grid, newSource);
+            _ips = new PointAxial[6];
+            _ipDirs = new Direction[6];
+            for (int i = 0; i < 6; ++i)
+            {
+                _ips[i] = other._ips[i];
+                _ipDirs[i] = other._ipDirs[i];
+            }
             _inputStream = other._inputStream; // This wouldn't really work if we had any input.
             _activeIp = other._activeIp;
             _tick = other._tick;
@@ -58,11 +64,6 @@ namespace Hexagony
             TargetOutput = other.TargetOutput;
             OutputLength = other.OutputLength;
             Success = other.Success;
-        }
-
-        public void ReplaceSource(Rune[] source)
-        {
-            _grid.ReplaceSource(source);
         }
 
         public void Run()
@@ -91,6 +92,7 @@ namespace Hexagony
                 switch (opcode.Value)
                 {
                     // NOP
+                    case '\0':
                     case '.': break;
 
                     // Terminate

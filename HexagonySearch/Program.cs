@@ -18,13 +18,13 @@ namespace HexagonySearch
             string targetString = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n10946\n17711\n28657\n46368\n75025\n121393\n196418\n317811\n514229\n832040";
 
             Rune[] sourceTemplate = @"!)!............".EnumerateRunes().ToArray();
+            List<Rune> requiredRunes = @";@".EnumerateRunes().ToList();
+            List<Rune> availableRunes = @"\/_|<>{}'""".EnumerateRunes().ToList();
+
             List<int> emptySlots = new();
             for (int i = 0; i < sourceTemplate.Length; ++i)
                 if (sourceTemplate[i] == new Rune('.'))
                     emptySlots.Add(i);
-
-            List<Rune> requiredRunes = @";@".EnumerateRunes().ToList();
-            List<Rune> availableRunes = @"\/_|<>{}'""".EnumerateRunes().ToList();
 
             List<Rune>[] requiredPermutations = GetPermutations(requiredRunes).ToArray();
             List<Rune>[] freeWords = GetWords(availableRunes, emptySlots.Count - requiredRunes.Count).ToArray();
@@ -84,8 +84,7 @@ namespace HexagonySearch
                         foreach ((int i, Rune rune) in freeSlots.Zip(freeRunes))
                             sourceArray[i] = rune;
 
-                        HexagonyEnv testInstance = new(hexagony);
-                        testInstance.ReplaceSource(sourceArray);
+                        HexagonyEnv testInstance = new(hexagony, sourceArray);
                         testInstance.MaxTicks = 15;
                         testInstance.Run();
 
