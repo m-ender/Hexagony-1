@@ -53,18 +53,18 @@ namespace Hexagony
                 var dir = _dir;
                 var cw = _cw;
 
-                if (dir is NorthEast)
+                if (dir == Direction.NorthEast)
                 {
                     mp = cw ? new PointAxial(mp.Q + 1, mp.R - 1) : new PointAxial(mp.Q, mp.R - 1);
                     dir = Direction.SouthEast;
                     cw = !cw;
                 }
-                else if (dir is East)
+                else if (dir == Direction.East)
                 {
                     mp = cw ? new PointAxial(mp.Q, mp.R + 1) : mp;
                     dir = Direction.NorthEast;
                 }
-                else if (dir is SouthEast)
+                else if (dir == Direction.SouthEast)
                 {
                     mp = cw ? new PointAxial(mp.Q - 1, mp.R + 1) : mp;
                     dir = Direction.East;
@@ -82,17 +82,17 @@ namespace Hexagony
                 var dir = _dir;
                 var cw = _cw;
 
-                if (dir is NorthEast)
+                if (dir == Direction.NorthEast)
                 {
                     mp = cw ? mp : new PointAxial(mp.Q, mp.R - 1);
                     dir = Direction.East;
                 }
-                else if (dir is East)
+                else if (dir == Direction.East)
                 {
                     mp = cw ? mp : new PointAxial(mp.Q + 1, mp.R - 1);
                     dir = Direction.SouthEast;
                 }
-                else if (dir is SouthEast)
+                else if (dir == Direction.SouthEast)
                 {
                     mp = cw ? new PointAxial(mp.Q - 1, mp.R + 1) : new PointAxial(mp.Q, mp.R + 1);
                     dir = Direction.NorthEast;
@@ -108,7 +108,7 @@ namespace Hexagony
                 .AppendLine("Memory (values are stored on the E, NE, and SE edges of the hexagons indicated by the coordinates):")
                 .AppendJoin(Environment.NewLine, _edges
                     .Select(x =>
-                        (sort: (x.Key.point.Q, x.Key.point.R, -x.Key.dir.Vector.R), text: FormatValue(x.Key.point, x.Key.dir, x.Value)))
+                        (sort: (x.Key.point.Q, x.Key.point.R, -x.Key.dir.Vector().R), text: FormatValue(x.Key.point, x.Key.dir, x.Value)))
                     .OrderBy(x => x.sort)
                     .Select(x => x.text))
                 .AppendLine()

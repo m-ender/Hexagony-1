@@ -166,16 +166,16 @@ namespace Hexagony
                         break;
 
                     // Control flow
-                    case '_': _ipDirs[_activeIp] = Dir.ReflectAtUnderscore; break;
-                    case '|': _ipDirs[_activeIp] = Dir.ReflectAtPipe; break;
-                    case '/': _ipDirs[_activeIp] = Dir.ReflectAtSlash; break;
-                    case '\\': _ipDirs[_activeIp] = Dir.ReflectAtBackslash; break;
+                    case '_': _ipDirs[_activeIp] = Dir.ReflectAtUnderscore(); break;
+                    case '|': _ipDirs[_activeIp] = Dir.ReflectAtPipe(); break;
+                    case '/': _ipDirs[_activeIp] = Dir.ReflectAtSlash(); break;
+                    case '\\': _ipDirs[_activeIp] = Dir.ReflectAtBackslash(); break;
                     case '<': _ipDirs[_activeIp] = Dir.ReflectAtLessThan(_memory.Get() > 0); break;
                     case '>': _ipDirs[_activeIp] = Dir.ReflectAtGreaterThan(_memory.Get() > 0); break;
                     case ']': newIp = (_activeIp + 1) % 6; break;
                     case '[': newIp = (_activeIp + 5) % 6; break;
                     case '#': newIp = ((int)(_memory.Get() % 6) + 6) % 6; break;
-                    case '$': _ips[_activeIp] += Dir.Vector; HandleEdges(); break;
+                    case '$': _ips[_activeIp] += Dir.Vector(); HandleEdges(); break;
 
                     // Digits, letters, and other characters.
                     default:
@@ -190,7 +190,7 @@ namespace Hexagony
                         break;
                 }
 
-                _ips[_activeIp] += Dir.Vector;
+                _ips[_activeIp] += Dir.Vector();
                 HandleEdges();
                 _activeIp = newIp;
                 _tick++;
@@ -270,7 +270,7 @@ namespace Hexagony
             var zBigger = Math.Abs(z) >= _grid.Size;
 
             // Move the pointer back to the hex near the edge
-            _ips[_activeIp] -= Dir.Vector;
+            _ips[_activeIp] -= Dir.Vector();
 
             // If two values are still in range, we are wrapping around an edge (not a corner).
             if (!xBigger && !yBigger)
