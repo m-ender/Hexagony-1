@@ -26,8 +26,8 @@ namespace HexagonySearch
                 if (sourceTemplate[i] == new Rune('.'))
                     emptySlots.Add(i);
 
-            List<Rune>[] requiredPermutations = GetPermutations(requiredRunes).ToArray();
-            List<Rune>[] freeWords = GetWords(availableRunes, emptySlots.Count - requiredRunes.Count).ToArray();
+            Rune[][] requiredPermutations = GetPermutations(requiredRunes).Select(l => l.ToArray()).ToArray();
+            Rune[][] freeWords = GetWords(availableRunes, emptySlots.Count - requiredRunes.Count).Select(l => l.ToArray()).ToArray();
 
             Stopwatch timer = Stopwatch.StartNew();
 
@@ -47,7 +47,7 @@ namespace HexagonySearch
             };
             hexagony.Run();
 
-            foreach (List<int> requiredSlots in GetSubsets(emptySlots, requiredRunes.Count))
+            foreach (int[] requiredSlots in GetSubsets(emptySlots, requiredRunes.Count).Select(l => l.ToArray()))
             {
                 foreach (int i in emptySlots)
                     sourceTemplate[i] = new Rune('.');
@@ -72,17 +72,35 @@ namespace HexagonySearch
 
                 List<int> freeSlots = emptySlots.Where(i => !requiredSlots.Contains(i)).ToList();
 
-                foreach (List<Rune> permutation in requiredPermutations)
+                for (int iPerm = 0; iPerm < requiredPermutations.Length; ++iPerm)
                 {
+                    Rune[] permutation = requiredPermutations[iPerm];
                     foreach ((int i, Rune rune) in requiredSlots.Zip(permutation))
                         sourceTemplate[i] = rune;
 
                     Parallel.For(0, freeWords.Length, iWord =>
                     {
-                        List<Rune> freeRunes = freeWords[iWord];
-                        Rune[] sourceArray = (Rune[])sourceTemplate.Clone();
-                        foreach ((int i, Rune rune) in freeSlots.Zip(freeRunes))
-                            sourceArray[i] = rune;
+                        Rune[] freeRunes = freeWords[iWord];
+                        Rune[] sourceArray = new Rune[sourceTemplate.Length];
+
+                        for (int i = 0; i < sourceArray.Length; ++i)
+                            sourceArray[i] = sourceTemplate[i];
+
+                        for (int k = 0; k < freeSlots.Count; ++k)
+                        {
+                            int slot = freeSlots[k];
+                            for (int iSlot = 0; iSlot < requiredSlots.Length; ++iSlot)
+                            {
+                                int i = requiredSlots[iSlot];
+                                if (i > slot)
+                                    break;
+
+                                if (sourceTemplate[i] == freeRunes[k])
+                                    return;
+                            }
+
+                            sourceArray[slot] = freeRunes[k];
+                        }
 
                         HexagonyEnv testInstance = new(hexagony, sourceArray);
                         testInstance.MaxTicks = 15;
