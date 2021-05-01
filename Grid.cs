@@ -8,7 +8,6 @@ namespace Hexagony
     {
         public int Size { get; }
         private readonly Rune[,] _grid;
-        private readonly Dictionary<PointAxial, (int x, int y)> _axialToIndex;
         private readonly int[] _lineLengths;
 
         public Grid(int size)
@@ -19,7 +18,6 @@ namespace Hexagony
         {
             Size = other.Size;
             _grid = new Rune[2 * Size - 1, 2 * Size - 1];
-            _axialToIndex = other._axialToIndex;
             _lineLengths = other._lineLengths;
 
             ReplaceSource(newSource);
@@ -29,15 +27,6 @@ namespace Hexagony
         {
             Size = size;
 
-            _axialToIndex = new();
-
-            for (int r = -size + 1; r <= size - 1; ++r)
-                for (int q = -size + 1 - Math.Min(r, 0); q <= size - 1 - Math.Max(r, 0); ++q)
-                {
-                    PointAxial p = new(q, r);
-                    _axialToIndex[p] = AxialToIndex(p);
-                }
-
             _lineLengths = new int[2*size-1];
             _grid = new Rune[2 * size - 1, 2 * size - 1];
 
@@ -45,8 +34,9 @@ namespace Hexagony
                 for (int y = 0; y < 2 * size - 1; ++y)
                 {
                     _lineLengths[y] = 2 * size - 1 - Math.Abs(size - 1 - y);
-                    
-                    for (int x = 0; x < _lineLengths[y]; ++x)
+
+                    int offset = Math.Max(size - 1 - y, 0);
+                    for (int x = offset; x < offset + _lineLengths[y]; ++x)
                         _grid[y, x] = e != null && e.MoveNext()
                             ? e.Current
                             : new Rune('.');
@@ -87,33 +77,24 @@ namespace Hexagony
         {
             int i = 0;
             for (int y = 0; y < _grid.Length; ++y)
-                for (int x = 0; x < _lineLengths[y]; ++x)
+            {
+                int offset = Math.Max(Size - 1 - y, 0);
+                for (int x = offset; x < offset + _lineLengths[y]; ++x)
                 {
-                    _grid[y,x] = source[i++];
+                    _grid[y, x] = source[i++];
                     if (i >= source.Length)
                         return;
                 }
+            }
         }
 
         public Rune this[PointAxial coords]
         {
             get
             {
-                var (x, y) = _axialToIndex[coords];
-                return _grid[y,x];
+                (int q, int r) = coords;
+                return _grid[r+Size-1, q+Size-1];
             }
-        }
-
-        private (int, int) AxialToIndex(PointAxial coords)
-        {
-            var (q, r) = coords;
-            // var y = -x - z;
-            //if (Ut.Max(Math.Abs(x), Math.Abs(y), Math.Abs(z)) >= Size)
-            //    return null;
-
-            var y = r + Size - 1;
-            var x = q + Math.Min(y, Size - 1);
-            return (x, y);
         }
 
         public override string ToString() => "";

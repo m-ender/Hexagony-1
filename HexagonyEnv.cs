@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using RT.Util;
@@ -68,126 +67,114 @@ namespace Hexagony
 
         public void Run()
         {
-            foreach (var _ in GetProgram())
-            {
-            }
-        }
-
-        private Direction Dir => _ipDirs[_activeIp];
-        private PointAxial Coords => _ips[_activeIp];
-
-        private IEnumerable<int> GetProgram()
-        {
-            if (_grid.Size == 0)
-                yield break;
+            //if (_grid.Size == 0)
+            //    return;
 
             while (true)
             {
-                yield return 0;
-
                 // Execute the current instruction
                 var newIp = _activeIp;
                 var opcode = _grid[Coords];
 
                 switch (opcode.Value)
                 {
-                    // NOP
-                    case '\0':
-                    case '.': break;
+                // NOP
+                case '\0':
+                case '.': break;
 
-                    // Terminate
-                    case '@': Terminate(); yield break;
+                // Terminate
+                case '@': Terminate(); return;
 
-                    // Arithmetic
-                    case ')': _memory.Set(_memory.Get() + 1); break;
-                    case '(': _memory.Set(_memory.Get() - 1); break;
-                    case '+': _memory.Set(_memory.GetLeft() + _memory.GetRight()); break;
-                    case '-': _memory.Set(_memory.GetLeft() - _memory.GetRight()); break;
-                    case '*': _memory.Set(_memory.GetLeft() * _memory.GetRight()); break;
-                    case '~': _memory.Set(-_memory.Get()); break;
+                // Arithmetic
+                case ')': _memory.Set(_memory.Get() + 1); break;
+                case '(': _memory.Set(_memory.Get() - 1); break;
+                case '+': _memory.Set(_memory.GetLeft() + _memory.GetRight()); break;
+                case '-': _memory.Set(_memory.GetLeft() - _memory.GetRight()); break;
+                case '*': _memory.Set(_memory.GetLeft() * _memory.GetRight()); break;
+                case '~': _memory.Set(-_memory.Get()); break;
 
-                    case ':':
-                    case '%':
-                        var leftVal = _memory.GetLeft();
-                        var rightVal = _memory.GetRight();
+                case ':':
+                case '%':
+                    var leftVal = _memory.GetLeft();
+                    var rightVal = _memory.GetRight();
 
-                        if (rightVal == 0)
-                        {
-                            Terminate();
-                            yield break;
-                        }
+                    if (rightVal == 0)
+                    {
+                        Terminate();
+                        return;
+                    }
 
-                        var div = Math.DivRem(leftVal, rightVal, out var rem);
-                        // The semantics of integer division and modulo are different in Hexagony because the
-                        // reference interpreter was written in Ruby. Account for this discrepancy.
-                        if (rem != 0 && leftVal < 0 ^ rightVal < 0)
-                        {
-                            rem += rightVal;
-                            div--;
-                        }
-                        _memory.Set(opcode.Value == ':' ? div : rem);
-                        break;
+                    var div = Math.DivRem(leftVal, rightVal, out var rem);
+                    // The semantics of integer division and modulo are different in Hexagony because the
+                    // reference interpreter was written in Ruby. Account for this discrepancy.
+                    if (rem != 0 && leftVal < 0 ^ rightVal < 0)
+                    {
+                        rem += rightVal;
+                        div--;
+                    }
+                    _memory.Set(opcode.Value == ':' ? div : rem);
+                    break;
 
-                    // Memory manipulation
-                    case '{': _memory.MoveLeft(); break;
-                    case '}': _memory.MoveRight(); break;
-                    case '=': _memory.Reverse(); break;
-                    case '"': _memory.Reverse(); _memory.MoveRight(); _memory.Reverse(); break;
-                    case '\'': _memory.Reverse(); _memory.MoveLeft(); _memory.Reverse(); break;
-                    case '^':
-                        if (_memory.Get() > 0)
-                            _memory.MoveRight();
-                        else
-                            _memory.MoveLeft();
-                        break;
-                    case '&':
-                        _memory.Set(_memory.Get() > 0 ? _memory.GetRight() : _memory.GetLeft());
-                        break;
+                // Memory manipulation
+                case '{': _memory.MoveLeft(); break;
+                case '}': _memory.MoveRight(); break;
+                case '=': _memory.Reverse(); break;
+                case '"': _memory.Reverse(); _memory.MoveRight(); _memory.Reverse(); break;
+                case '\'': _memory.Reverse(); _memory.MoveLeft(); _memory.Reverse(); break;
+                case '^':
+                    if (_memory.Get() > 0)
+                        _memory.MoveRight();
+                    else
+                        _memory.MoveLeft();
+                    break;
+                case '&':
+                    _memory.Set(_memory.Get() > 0 ? _memory.GetRight() : _memory.GetLeft());
+                    break;
 
-                    // I/O
-                    case ',':
-                        _memory.Set(ReadByte());
-                        break;
+                // I/O
+                case ',':
+                    _memory.Set(ReadByte());
+                    break;
 
-                    case ';':
-                        AppendOutput((char)(((int)(_memory.Get() % 256) + 256) % 256));
-                        if (!Success)
-                            yield break;
-                        break;
+                case ';':
+                    AppendOutput((char)(((int)(_memory.Get() % 256) + 256) % 256));
+                    if (!Success)
+                        return;
+                    break;
 
-                    case '?':
-                        _memory.Set(FindInteger());
-                        break;
+                case '?':
+                    _memory.Set(FindInteger());
+                    break;
 
-                    case '!':
-                        AppendOutput(_memory.Get());
-                        if (!Success)
-                            yield break;
-                        break;
+                case '!':
+                    AppendOutput(_memory.Get());
+                    if (!Success)
+                        return;
+                    break;
 
-                    // Control flow
-                    case '_': _ipDirs[_activeIp] = Dir.ReflectAtUnderscore(); break;
-                    case '|': _ipDirs[_activeIp] = Dir.ReflectAtPipe(); break;
-                    case '/': _ipDirs[_activeIp] = Dir.ReflectAtSlash(); break;
-                    case '\\': _ipDirs[_activeIp] = Dir.ReflectAtBackslash(); break;
-                    case '<': _ipDirs[_activeIp] = Dir.ReflectAtLessThan(_memory.Get() > 0); break;
-                    case '>': _ipDirs[_activeIp] = Dir.ReflectAtGreaterThan(_memory.Get() > 0); break;
-                    case ']': newIp = (_activeIp + 1) % 6; break;
-                    case '[': newIp = (_activeIp + 5) % 6; break;
-                    case '#': newIp = ((int)(_memory.Get() % 6) + 6) % 6; break;
-                    case '$': _ips[_activeIp] += Dir.Vector(); HandleEdges(); break;
+                // Control flow
+                case '_': _ipDirs[_activeIp] = Dir.ReflectAtUnderscore(); break;
+                case '|': _ipDirs[_activeIp] = Dir.ReflectAtPipe(); break;
+                case '/': _ipDirs[_activeIp] = Dir.ReflectAtSlash(); break;
+                case '\\': _ipDirs[_activeIp] = Dir.ReflectAtBackslash(); break;
+                case '<': _ipDirs[_activeIp] = Dir.ReflectAtLessThan(_memory.Get() > 0); break;
+                case '>': _ipDirs[_activeIp] = Dir.ReflectAtGreaterThan(_memory.Get() > 0); break;
+                case ']': newIp = (_activeIp + 1) % 6; break;
+                case '[': newIp = (_activeIp + 5) % 6; break;
+                case '#': newIp = ((int)(_memory.Get() % 6) + 6) % 6; break;
+                case '$': _ips[_activeIp] += Dir.Vector(); HandleEdges(); break;
 
-                    // Digits, letters, and other characters.
-                    default:
-                        if (opcode.Value is >= '0' and <= '9')
-                        {
-                            var opVal = opcode.Value - '0';
-                            var memVal = _memory.Get();
-                            _memory.Set(memVal * 10 + (memVal < 0 ? -opVal : opVal));
-                        }
-                        else
-                            _memory.Set(opcode.Value);
-                        break;
+                // Digits, letters, and other characters.
+                default:
+                    if (opcode.Value is >= '0' and <= '9')
+                    {
+                        var opVal = opcode.Value - '0';
+                        var memVal = _memory.Get();
+                        _memory.Set(memVal * 10 + (memVal < 0 ? -opVal : opVal));
+                    }
+                    else
+                        _memory.Set(opcode.Value);
+                    break;
                 }
 
                 _ips[_activeIp] += Dir.Vector();
@@ -196,9 +183,12 @@ namespace Hexagony
                 _tick++;
 
                 if (TimedOut)
-                    yield break;
+                    return;
             }
         }
+
+        private Direction Dir => _ipDirs[_activeIp];
+        private PointAxial Coords => _ips[_activeIp];
 
         private void Terminate()
         {
@@ -253,13 +243,13 @@ namespace Hexagony
 
         private void HandleEdges()
         {
-            if (_grid.Size == 1)
-            {
-                _ips[_activeIp] = new PointAxial(0, 0);
-                return;
-            }
+            //if (_grid.Size == 1)
+            //{
+            //    _ips[_activeIp] = new PointAxial(0, 0);
+            //    return;
+            //}
 
-            var(x, z) = Coords;
+            var (x, z) = Coords;
             var y = -x - z;
 
             if (Ut.Max(Math.Abs(x), Math.Abs(y), Math.Abs(z)) < _grid.Size)
