@@ -72,21 +72,23 @@ namespace HexagonySearch
 
                 List<int> freeSlots = emptySlots.Where(i => !requiredSlots.Contains(i)).ToList();
 
-                for (int iPerm = 0; iPerm < requiredPermutations.Length; ++iPerm)
+                Parallel.For(0, requiredPermutations.Length, iPerm =>
                 {
                     Rune[] permutation = requiredPermutations[iPerm];
-                    foreach ((int i, Rune rune) in requiredSlots.Zip(permutation))
-                        sourceTemplate[i] = rune;
 
-                    Parallel.For(0, freeWords.Length, iWord =>
+                    Rune[] sourceArray = new Rune[sourceTemplate.Length];
+                    for (int i = 0; i < sourceArray.Length; ++i)
+                        sourceArray[i] = sourceTemplate[i];
+
+                    foreach ((int i, Rune rune) in requiredSlots.Zip(permutation))
+                        sourceArray[i] = rune;
+
+                    for (int iWord = 0; iWord < freeWords.Length; ++iWord)
                     {
                         Rune[] freeRunes = freeWords[iWord];
-                        Rune[] sourceArray = new Rune[sourceTemplate.Length];
 
-                        for (int i = 0; i < sourceArray.Length; ++i)
-                            sourceArray[i] = sourceTemplate[i];
-
-                        for (int k = 0; k < freeSlots.Count; ++k)
+                        bool skip = false;
+                        for (int k = 0; k < freeSlots.Count && !skip; ++k)
                         {
                             int slot = freeSlots[k];
                             for (int iSlot = 0; iSlot < requiredSlots.Length; ++iSlot)
@@ -95,27 +97,33 @@ namespace HexagonySearch
                                 if (i > slot)
                                     break;
 
-                                if (sourceTemplate[i] == freeRunes[k])
-                                    return;
+                                if (sourceArray[i] == freeRunes[k])
+                                {
+                                    skip = true;
+                                    break;
+                                };
                             }
 
                             sourceArray[slot] = freeRunes[k];
                         }
+
+                        if (skip)
+                            continue;
 
                         HexagonyEnv testInstance = new(hexagony, sourceArray);
                         testInstance.MaxTicks = 15;
                         testInstance.Run();
 
                         if (!testInstance.Success || testInstance.OutputLength < 1)
-                            return;
+                            continue;
 
                         testInstance.MaxTicks = 10000;
                         testInstance.Run();
 
                         if (testInstance.Success && !testInstance.TimedOut)
                             Console.WriteLine($"SOLUTION! {string.Concat(sourceArray)}");
-                    });
-                }
+                    }
+                });
             }
         }
 
