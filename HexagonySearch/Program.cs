@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
-using System.Threading.Tasks;
 using Hexagony;
 using RT.Util.ExtensionMethods;
 
@@ -72,7 +71,7 @@ namespace HexagonySearch
 
                 List<int> freeSlots = emptySlots.Where(i => !requiredSlots.Contains(i)).ToList();
 
-                Parallel.For(0, requiredPermutations.Length, iPerm =>
+                new WorkerThreadManager(Environment.ProcessorCount, requiredPermutations.Length, iPerm =>
                 {
                     Rune[] permutation = requiredPermutations[iPerm];
 
@@ -123,7 +122,7 @@ namespace HexagonySearch
                         if (testInstance.Success && !testInstance.TimedOut)
                             Console.WriteLine($"SOLUTION! {string.Concat(sourceArray)}");
                     }
-                });
+                }).Run();
             }
         }
 
