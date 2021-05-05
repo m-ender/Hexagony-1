@@ -2,7 +2,7 @@
 
 namespace Hexagony
 {
-    enum Direction
+    public enum Direction
     {
         East,
         SouthEast,
@@ -12,7 +12,7 @@ namespace Hexagony
         NorthEast,
     }
 
-    static class DirectionExtensions
+    public static class DirectionExtensions
     {
         private static Direction[] reflectAtSlash = new[] { NorthWest, West, SouthWest, SouthEast, East, NorthEast };
         private static Direction[] reflectAtBackslash = new[] { SouthWest, SouthEast, East, NorthEast, NorthWest, West };

@@ -2,7 +2,7 @@
 
 namespace Hexagony
 {
-    readonly struct PointAxial : IEquatable<PointAxial>
+    public readonly struct PointAxial : IEquatable<PointAxial>
     {
         public int Q { get; }
         public int R { get; }

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Hexagony
 {
-    class Grid
+    public class Grid
     {
         public int Size { get; }
         private readonly Rune[,] _grid;
@@ -39,7 +39,7 @@ namespace Hexagony
                     for (int x = offset; x < offset + _lineLengths[y]; ++x)
                         _grid[y, x] = e != null && e.MoveNext()
                             ? e.Current
-                            : new Rune('.');
+                            : new Rune(0);
                 }
         }
 

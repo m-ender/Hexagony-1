@@ -14,6 +14,11 @@ namespace HexagonySearch
     {
         static void Main(string[] args)
         {
+            string scaffoldSource = "._.<.|";
+            Scaffold scaffold = new ScaffoldCompiler(scaffoldSource).Compile();
+            Console.WriteLine(scaffold);
+            return;
+
             string targetString = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n10946\n17711\n28657\n46368\n75025\n121393\n196418\n317811\n514229\n832040";
 
             Rune[] sourceTemplate = @"1'1...........".EnumerateRunes().ToArray();
