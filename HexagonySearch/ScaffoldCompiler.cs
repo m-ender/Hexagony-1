@@ -9,10 +9,18 @@ namespace HexagonySearch
 {
     public class ScaffoldCompiler
     {
+        private enum MemoryState
+        {
+            Unknown,
+            Positive,
+            NonPositive,
+        }
+
         private struct IPState
         {
             public PointAxial Position { get; set; }
             public Direction Direction { get; set; }
+            public MemoryState MemoryState { get; set; }
         }
 
         private readonly Grid grid;
@@ -49,6 +57,7 @@ namespace HexagonySearch
             {
                 Position = new PointAxial(0, -grid.Size + 1),
                 Direction = Direction.East,
+                MemoryState = MemoryState.NonPositive,
             };
 
             CompileSegment(ip);
@@ -116,6 +125,7 @@ namespace HexagonySearch
                             {
                                 Position = ip.Position + Direction.SouthEast.Vector(),
                                 Direction = Direction.SouthEast,
+                                MemoryState = MemoryState.Positive,
                             };
 
                             positiveIP = HandleEdges(positiveIP)[0];
@@ -124,12 +134,25 @@ namespace HexagonySearch
                             {
                                 Position = ip.Position + Direction.NorthEast.Vector(),
                                 Direction = Direction.NorthEast,
+                                MemoryState = MemoryState.NonPositive,
                             };
 
-                            nonPositiveIP = HandleEdges(nonPositiveIP).Last();
+                            nonPositiveIP = HandleEdges(nonPositiveIP)[0];
 
-                            CompileBranch(positiveIP, nonPositiveIP);
-                            return;
+                            switch (ip.MemoryState)
+                            {
+                            case MemoryState.Unknown:
+                                CompileBranch(positiveIP, nonPositiveIP);
+                                return;
+                            case MemoryState.Positive:
+                                ip = positiveIP;
+                                break;
+                            case MemoryState.NonPositive:
+                                ip = nonPositiveIP;
+                                break;
+                            }
+
+                            ip.Position -= ip.Direction.Vector();
                         }
                         else
                             ip.Direction = ip.Direction.ReflectAtLessThan(false);
@@ -141,6 +164,7 @@ namespace HexagonySearch
                             {
                                 Position = ip.Position + Direction.NorthWest.Vector(),
                                 Direction = Direction.NorthWest,
+                                MemoryState = MemoryState.Positive,
                             };
 
                             positiveIP = HandleEdges(positiveIP)[0];
@@ -149,12 +173,25 @@ namespace HexagonySearch
                             {
                                 Position = ip.Position + Direction.SouthWest.Vector(),
                                 Direction = Direction.SouthWest,
+                                MemoryState = MemoryState.NonPositive,
                             };
 
-                            nonPositiveIP = HandleEdges(nonPositiveIP).Last();
+                            nonPositiveIP = HandleEdges(nonPositiveIP)[0];
 
-                            CompileBranch(positiveIP, nonPositiveIP);
-                            return;
+                            switch (ip.MemoryState)
+                            {
+                            case MemoryState.Unknown:
+                                CompileBranch(positiveIP, nonPositiveIP);
+                                return;
+                            case MemoryState.Positive:
+                                ip = positiveIP;
+                                break;
+                            case MemoryState.NonPositive:
+                                ip = nonPositiveIP;
+                                break;
+                            }
+
+                            ip.Position -= ip.Direction.Vector();
                         }
                         else
                             ip.Direction = ip.Direction.ReflectAtGreaterThan(false);
@@ -164,6 +201,7 @@ namespace HexagonySearch
                         {
                             Index = opCode - 1,
                         });
+                        ip.MemoryState = MemoryState.Unknown;
                         break;
                     }
                 }
@@ -175,6 +213,9 @@ namespace HexagonySearch
         private void CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
         {
             int branchIndex = program.Count;
+
+            positive.MemoryState = MemoryState.Positive;
+            nonPositive.MemoryState = MemoryState.NonPositive;
 
             // Add placeholder because we don't know the indices yet.
             program.Add(new MetaOpcode());
@@ -244,6 +285,19 @@ namespace HexagonySearch
             {
                 ip.Position = new PointAxial(pos.Q + pos.R, -pos.R);
                 results.Add(ip);
+            }
+
+            if (results.Count == 2)
+            {
+                switch (ip.MemoryState)
+                {
+                case MemoryState.Positive:
+                    results.RemoveAt(1);
+                    break;
+                case MemoryState.NonPositive:
+                    results.RemoveAt(0);
+                    break;
+                }
             }
 
             return results.ToArray();
