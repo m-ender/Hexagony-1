@@ -146,8 +146,8 @@ namespace HexagonySearch
 
                             IPState nonPositiveIP = new IPState
                             {
-                                Position = ip.Position + Direction.SouthEast.Vector(),
-                                Direction = Direction.SouthEast,
+                                Position = ip.Position + Direction.SouthWest.Vector(),
+                                Direction = Direction.SouthWest,
                             };
 
                             nonPositiveIP = HandleEdges(nonPositiveIP).Last();
@@ -156,7 +156,7 @@ namespace HexagonySearch
                             return;
                         }
                         else
-                            ip.Direction = ip.Direction.ReflectAtLessThan(false);
+                            ip.Direction = ip.Direction.ReflectAtGreaterThan(false);
                         break;
                     default:
                         program.Add(new CommandSlot
