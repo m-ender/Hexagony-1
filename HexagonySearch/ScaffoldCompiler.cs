@@ -24,12 +24,12 @@ namespace HexagonySearch
 
         public ScaffoldCompiler(string source)
         {
-            // Replace '.' with increasing placeholder runes we can use to identify command
+            // Replace '?' with increasing placeholder runes we can use to identify command
             // slots. This would break for grids big enough to reach 36 cells (where this process
             // results in generating a '$').
             source = string.Concat(source.EnumerateRunes()
                 .Select((r, i) => {
-                    if (r.Value == '.')
+                    if (r.Value == '?')
                     {
                         commandIndices.Add(i + 1);
                         return new Rune(i + 1);
@@ -92,6 +92,7 @@ namespace HexagonySearch
                     switch (opCode)
                     {
                     case 0:
+                    case '.':
                         break;
                     case '/':
                         ip.Direction = ip.Direction.ReflectAtSlash();

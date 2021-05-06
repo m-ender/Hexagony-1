@@ -14,7 +14,7 @@ namespace HexagonySearch
     {
         static void Main(string[] args)
         {
-            string scaffoldSource = "._.<.|";
+            string scaffoldSource = "?_?<.|";
             Scaffold scaffold = new ScaffoldCompiler(scaffoldSource).Compile();
             Console.WriteLine(scaffold);
             return;
