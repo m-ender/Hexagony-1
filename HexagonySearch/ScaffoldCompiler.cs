@@ -25,10 +25,13 @@ namespace HexagonySearch
 
         private readonly Grid grid;
         private Scaffold? scaffold;
-        private List<MetaOpcode> program = new();
-        private List<int> commandIndices = new();
-        // Maps to an index into the program.
-        private Dictionary<IPState, int> processedStates = new();
+        private readonly List<MetaOpcode> program = new();
+        private readonly List<int> commandIndices = new();
+        // Maps to a segment of linear code.
+        private readonly Dictionary<IPState, List<MetaOpcode>> processedStates = new();
+        // Maps each command slot to an index in a depth-first order from the
+        // entry point.
+        private readonly Dictionary<int, int> commandSlotIndices = new();
 
         public ScaffoldCompiler(string source)
         {
@@ -66,8 +69,15 @@ namespace HexagonySearch
             return scaffold;
         }
 
-        private void CompileSegment(IPState initialIP, bool skip = false)
+        private List<MetaOpcode> CompileSegment(IPState initialIP, bool skip = false)
         {
+            if (processedStates.ContainsKey(initialIP))
+                return processedStates[initialIP];
+
+            List<MetaOpcode> segment = new();
+            processedStates[initialIP] = segment;
+
+            Dictionary<IPState, MetaOpcode> visitedIPStates = new();
             IPState ip = initialIP;
 
             while (true)
@@ -76,22 +86,18 @@ namespace HexagonySearch
 
                 if (newIPs.Length == 2)
                 {
-                    CompileBranch(newIPs[0], newIPs[1], skip);
-                    return;
+                    ReferenceBranch branch = CompileBranch(newIPs[0], newIPs[1], skip);
+                    segment.Add(branch);
+                    return segment;
                 }
 
                 ip = newIPs[0];
 
-                if (processedStates.ContainsKey(ip))
+                if (visitedIPStates.TryGetValue(ip, out MetaOpcode? target))
                 {
-                    program.Add(new Jump
-                    {
-                        Target = processedStates[ip],
-                    });
-                    return;
+                    segment.Add(new ReferenceJump(target));
+                    return segment;
                 }
-
-                processedStates[ip] = program.Count;
 
                 if (skip)
                     skip = false;
@@ -103,6 +109,9 @@ namespace HexagonySearch
                     case 0:
                     case '.':
                         break;
+                    case '@':
+                        segment.Add(new Exit());
+                        return segment;
                     case '/':
                         ip.Direction = ip.Direction.ReflectAtSlash();
                         break;
@@ -142,8 +151,9 @@ namespace HexagonySearch
                             switch (ip.MemoryState)
                             {
                             case MemoryState.Unknown:
-                                CompileBranch(positiveIP, nonPositiveIP);
-                                return;
+                                ReferenceBranch branch = CompileBranch(positiveIP, nonPositiveIP);
+                                segment.Add(branch);
+                                return segment;
                             case MemoryState.Positive:
                                 ip = positiveIP;
                                 break;
@@ -181,8 +191,9 @@ namespace HexagonySearch
                             switch (ip.MemoryState)
                             {
                             case MemoryState.Unknown:
-                                CompileBranch(positiveIP, nonPositiveIP);
-                                return;
+                                ReferenceBranch branch = CompileBranch(positiveIP, nonPositiveIP);
+                                segment.Add(branch);
+                                return segment;
                             case MemoryState.Positive:
                                 ip = positiveIP;
                                 break;
@@ -197,10 +208,18 @@ namespace HexagonySearch
                             ip.Direction = ip.Direction.ReflectAtGreaterThan(false);
                         break;
                     default:
-                        program.Add(new CommandSlot
+                        if (!commandSlotIndices.TryGetValue(opCode, out int index))
                         {
-                            Index = opCode - 1,
-                        });
+                            index = commandSlotIndices.Count;
+                            commandSlotIndices[opCode] = index;
+                        }
+
+                        CommandSlot cmdSlot = new CommandSlot
+                        {
+                            Index = index,
+                        };
+                        segment.Add(cmdSlot);
+                        visitedIPStates[ip] = cmdSlot;
                         ip.MemoryState = MemoryState.Unknown;
                         break;
                     }
@@ -210,32 +229,22 @@ namespace HexagonySearch
             }
         }
 
-        private void CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
+        private ReferenceBranch CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
         {
-            int branchIndex = program.Count;
-
             positive.MemoryState = MemoryState.Positive;
             nonPositive.MemoryState = MemoryState.NonPositive;
 
-            // Add placeholder because we don't know the indices yet.
-            program.Add(new MetaOpcode());
-            if (!processedStates.TryGetValue(positive, out int positiveTarget))
+            if (!processedStates.TryGetValue(positive, out List<MetaOpcode>? positiveSegment))
             {
-                positiveTarget = program.Count;
-                CompileSegment(positive, skip);
+                positiveSegment = CompileSegment(positive, skip);
             }
 
-            if (!processedStates.TryGetValue(nonPositive, out int nonPositiveTarget))
+            if (!processedStates.TryGetValue(nonPositive, out List<MetaOpcode>? nonPositiveSegment))
             {
-                nonPositiveTarget = program.Count;
-                CompileSegment(nonPositive, skip);
+                nonPositiveSegment = CompileSegment(nonPositive, skip);
             }
 
-            program[branchIndex] = new Branch
-            {
-                TargetIfPositive = positiveTarget,
-                TargetIfNotPositive = nonPositiveTarget,
-            };
+            return new ReferenceBranch(positiveSegment[0], nonPositiveSegment[0]);
         }
 
         private IPState[] HandleEdges(IPState ip)
@@ -247,15 +256,15 @@ namespace HexagonySearch
                 return new[] { ip };
             }
 
-            var (x, z) = pos;
-            var y = -x - z;
+            (int x, int z) = pos;
+            int y = -x - z;
 
             if (Ut.Max(Math.Abs(x), Math.Abs(y), Math.Abs(z)) < grid.Size)
                 return new[] { ip };
 
-            var xBigger = Math.Abs(x) >= grid.Size;
-            var yBigger = Math.Abs(y) >= grid.Size;
-            var zBigger = Math.Abs(z) >= grid.Size;
+            bool xBigger = Math.Abs(x) >= grid.Size;
+            bool yBigger = Math.Abs(y) >= grid.Size;
+            bool zBigger = Math.Abs(z) >= grid.Size;
 
             // Move the pointer back to the hex near the edge
             pos -= ip.Direction.Vector();
