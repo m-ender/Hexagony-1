@@ -27,11 +27,15 @@ namespace HexagonySearch
         private Scaffold? scaffold;
         private readonly List<MetaOpcode> program = new();
         private readonly List<int> commandIndices = new();
-        // Maps to a segment of linear code.
-        private readonly Dictionary<IPState, List<MetaOpcode>> processedStates = new();
+        // Maps to a segment of linear code. Each opcode is paired with an
+        // "address", an incrementing integer.
+        private readonly Dictionary<IPState, List<(int, MetaOpcode)>> processedStates = new();
         // Maps each command slot to an index in a depth-first order from the
         // entry point.
         private readonly Dictionary<int, int> commandSlotIndices = new();
+        // For each opcode, this contains a set of branches and jumps pointing at it.
+        private readonly Dictionary<int, HashSet<int>> inverseJumps = new();
+        private int nextAddress = 0;
 
         public ScaffoldCompiler(string source)
         {
@@ -69,15 +73,15 @@ namespace HexagonySearch
             return scaffold;
         }
 
-        private List<MetaOpcode> CompileSegment(IPState initialIP, bool skip = false)
+        private List<(int, MetaOpcode)> CompileSegment(IPState initialIP, bool skip = false)
         {
             if (processedStates.ContainsKey(initialIP))
                 return processedStates[initialIP];
 
-            List<MetaOpcode> segment = new();
+            List<(int, MetaOpcode)> segment = new();
             processedStates[initialIP] = segment;
 
-            Dictionary<IPState, MetaOpcode> visitedIPStates = new();
+            Dictionary<IPState, int> visitedIPStates = new();
             IPState ip = initialIP;
 
             while (true)
@@ -86,16 +90,21 @@ namespace HexagonySearch
 
                 if (newIPs.Length == 2)
                 {
-                    ReferenceBranch branch = CompileBranch(newIPs[0], newIPs[1], skip);
-                    segment.Add(branch);
+                    segment.Add(CompileBranch(newIPs[0], newIPs[1], skip));
                     return segment;
                 }
 
                 ip = newIPs[0];
 
-                if (visitedIPStates.TryGetValue(ip, out MetaOpcode? target))
+                if (visitedIPStates.TryGetValue(ip, out int target))
                 {
-                    segment.Add(new ReferenceJump(target));
+                    int address = nextAddress++;
+                    Jump jump = new Jump
+                    {
+                        Target = target
+                    };
+                    RegisterJump(address, target);
+                    segment.Add((address, jump));
                     return segment;
                 }
 
@@ -110,7 +119,7 @@ namespace HexagonySearch
                     case '.':
                         break;
                     case '@':
-                        segment.Add(new Exit());
+                        segment.Add((nextAddress++, new Exit()));
                         return segment;
                     case '/':
                         ip.Direction = ip.Direction.ReflectAtSlash();
@@ -151,8 +160,7 @@ namespace HexagonySearch
                             switch (ip.MemoryState)
                             {
                             case MemoryState.Unknown:
-                                ReferenceBranch branch = CompileBranch(positiveIP, nonPositiveIP);
-                                segment.Add(branch);
+                                segment.Add(CompileBranch(positiveIP, nonPositiveIP));
                                 return segment;
                             case MemoryState.Positive:
                                 ip = positiveIP;
@@ -191,8 +199,7 @@ namespace HexagonySearch
                             switch (ip.MemoryState)
                             {
                             case MemoryState.Unknown:
-                                ReferenceBranch branch = CompileBranch(positiveIP, nonPositiveIP);
-                                segment.Add(branch);
+                                segment.Add(CompileBranch(positiveIP, nonPositiveIP));
                                 return segment;
                             case MemoryState.Positive:
                                 ip = positiveIP;
@@ -218,8 +225,9 @@ namespace HexagonySearch
                         {
                             Index = index,
                         };
-                        segment.Add(cmdSlot);
-                        visitedIPStates[ip] = cmdSlot;
+                        int address = nextAddress++;
+                        segment.Add((address, cmdSlot));
+                        visitedIPStates[ip] = address;
                         ip.MemoryState = MemoryState.Unknown;
                         break;
                     }
@@ -229,22 +237,41 @@ namespace HexagonySearch
             }
         }
 
-        private ReferenceBranch CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
+        private void RegisterJump(int from, int to)
         {
+            if (!inverseJumps.TryGetValue(to, out HashSet<int>? sources))
+            {
+                sources = inverseJumps[to] = new HashSet<int>();
+            }
+
+            sources.Add(from);
+        }
+
+        private (int, Branch) CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
+        {
+            int address = nextAddress++;
+
             positive.MemoryState = MemoryState.Positive;
             nonPositive.MemoryState = MemoryState.NonPositive;
 
-            if (!processedStates.TryGetValue(positive, out List<MetaOpcode>? positiveSegment))
+            if (!processedStates.TryGetValue(positive, out List<(int address, MetaOpcode)>? positiveSegment))
             {
                 positiveSegment = CompileSegment(positive, skip);
             }
 
-            if (!processedStates.TryGetValue(nonPositive, out List<MetaOpcode>? nonPositiveSegment))
+            if (!processedStates.TryGetValue(nonPositive, out List<(int address, MetaOpcode)>? nonPositiveSegment))
             {
                 nonPositiveSegment = CompileSegment(nonPositive, skip);
             }
 
-            return new ReferenceBranch(positiveSegment[0], nonPositiveSegment[0]);
+            Branch branch = new Branch
+            {
+                TargetIfPositive = positiveSegment[0].address,
+                TargetIfNotPositive = nonPositiveSegment[0].address,
+            };
+            RegisterJump(address, branch.TargetIfPositive);
+            RegisterJump(address, branch.TargetIfNotPositive);
+            return (address, branch);
         }
 
         private IPState[] HandleEdges(IPState ip)
