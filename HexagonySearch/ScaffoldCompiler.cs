@@ -21,6 +21,18 @@ namespace HexagonySearch
             public PointAxial Position { get; set; }
             public Direction Direction { get; set; }
             public MemoryState MemoryState { get; set; }
+
+            public static bool operator ==(IPState ip1, IPState ip2)
+            {
+                return ip1.Position == ip2.Position
+                    && ip1.Direction == ip2.Direction
+                    && ip1.MemoryState == ip2.MemoryState;
+            }
+
+            public static bool operator !=(IPState ip1, IPState ip2)
+            {
+                return !(ip1 == ip2);
+            }
         }
 
         private readonly Grid grid;
@@ -30,6 +42,8 @@ namespace HexagonySearch
         // Maps to a segment of linear code. Each opcode is paired with an
         // "address", an incrementing integer.
         private readonly Dictionary<IPState, List<MetaOpcode>> processedStates = new();
+        private readonly Dictionary<int, MetaOpcode> addressLookup = new();
+        private readonly List<List<MetaOpcode>> segments = new();
         // Maps each command slot to an index in a depth-first order from the
         // entry point.
         private readonly Dictionary<int, int> commandSlotIndices = new();
@@ -40,14 +54,13 @@ namespace HexagonySearch
         public ScaffoldCompiler(string source)
         {
             // Replace '?' with increasing placeholder runes we can use to identify command
-            // slots. This would break for grids big enough to reach 36 cells (where this process
-            // results in generating a '$').
+            // slots.
             source = string.Concat(source.EnumerateRunes()
                 .Select((r, i) => {
                     if (r.Value == '?')
                     {
-                        commandIndices.Add(i + 1);
-                        return new Rune(i + 1);
+                        commandIndices.Add(i + 128);
+                        return new Rune(i + 128);
                     }
                     else
                         return r;
@@ -68,15 +81,92 @@ namespace HexagonySearch
             };
 
             CompileSegment(ip);
+            BuildAddressLookup();
             NormalizeLoops();
 
             scaffold = new(program.ToArray(), commandIndices.ToArray());
             return scaffold;
         }
 
+        private void BuildAddressLookup()
+        {
+            foreach (List<MetaOpcode> segment in segments)
+                foreach (MetaOpcode opcode in segment)
+                    addressLookup[opcode.Address] = opcode;
+        }
+
         private void NormalizeLoops()
         {
-            
+            for (int i = 0; i < segments.Count; ++i)
+            {
+                List<MetaOpcode> segment = segments[i];
+                if (segment[^1] is not Jump jump)
+                    continue;
+
+                // The way we construct the segments, it shouldn't really be possible
+                // to end in a jump that goes outside of the segment, but better safe
+                // than sorry.
+                if (jump.Target < segment[0].Address || jump.Target > jump.Address)
+                    continue;
+
+                int linearLength = jump.Target - segment[0].Address;
+                if (linearLength > 0)
+                {
+                    List<MetaOpcode> linearSegment = segment.Take(linearLength).ToList();
+                    segment.RemoveRange(0, linearLength);
+                    linearSegment.Add(new Jump
+                    {
+                        Address = -1, // ???
+                        Target = segment[0].Address,
+                    });
+                    segments.Insert(i, linearSegment);
+                    ++i;
+                }
+
+                segment.RemoveAt(segment.Count-1);
+                if (segment.Count > 0)
+                {
+                    // I'm not sure this can happen but you never know.
+                    // Any jumps or branches pointing at the final jump get redirected
+                    // to the jump's target instead.
+                    foreach (List<MetaOpcode> sourceSegment in segments)
+                    {
+                        if (sourceSegment[^1] is Branch sourceBranch)
+                        {
+                            if (sourceBranch.TargetIfPositive == jump.Address)
+                                sourceSegment[^1] = sourceBranch = sourceBranch with { TargetIfPositive = jump.Target };
+                            if (sourceBranch.TargetIfNotPositive == jump.Address)
+                                sourceSegment[^1] = sourceBranch with { TargetIfNotPositive = jump.Target };
+                        }
+                        else if (sourceSegment[^1] is Jump sourceJump)
+                        {
+                            if (sourceJump.Target == jump.Address)
+                                sourceSegment[^1] = sourceJump with { Target = jump.Target };
+                        }
+                    }
+
+                    // TODO: Remove repetition inside the loop, e.g. 112112112 --> 112
+
+                    // Normalise loop segment to lexicographically smallest rotation.
+                    List<CommandSlot> loopSegment = segment.Cast<CommandSlot>().ToList();
+                    List<CommandSlot> minimalRotation = loopSegment.ToList();
+                    for (int j = 1; j < loopSegment.Count; ++j)
+                    {
+                        loopSegment.Add(loopSegment[0]);
+                        loopSegment.RemoveAt(0);
+                        for (int k = 0; k < segment.Count; ++k)
+                        {
+                            if (loopSegment[k].Index < minimalRotation[k].Index)
+                                minimalRotation = loopSegment.ToList();
+                            else if (loopSegment[k].Index > minimalRotation[k].Index)
+                                break;
+                        }
+                    }
+                    segment = segments[i] = minimalRotation.Cast<MetaOpcode>().ToList();
+                }
+
+                segment.Add(new Loop { Address = jump.Address });
+            }
         }
 
         private List<MetaOpcode> CompileSegment(IPState initialIP, bool skip = false)
@@ -86,6 +176,7 @@ namespace HexagonySearch
 
             List<MetaOpcode> segment = new();
             processedStates[initialIP] = segment;
+            segments.Add(segment);
 
             Dictionary<IPState, int> visitedIPStates = new();
             IPState ip = initialIP;
@@ -114,6 +205,8 @@ namespace HexagonySearch
                     segment.Add(jump);
                     return segment;
                 }
+
+                visitedIPStates[ip] = nextAddress;
 
                 if (skip)
                     skip = false;
@@ -235,7 +328,6 @@ namespace HexagonySearch
                             Index = index,
                         };
                         segment.Add(cmdSlot);
-                        visitedIPStates[ip] = address;
                         ip.MemoryState = MemoryState.Unknown;
                         break;
                     }
