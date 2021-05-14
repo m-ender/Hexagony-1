@@ -3,7 +3,9 @@
 namespace HexagonySearch
 {
     public record MetaOpcode
-    { }
+    {
+        public int Address { get; init; }
+    }
 
     public record Exit : MetaOpcode
     {
@@ -17,6 +19,12 @@ namespace HexagonySearch
 
         public override string ToString() 
             => $"_{Index}";
+    }
+
+    public record Loop : MetaOpcode
+    {
+        public override string ToString()
+            => "loop";
     }
 
     public record Jump : MetaOpcode

@@ -29,7 +29,7 @@ namespace HexagonySearch
         private readonly List<int> commandIndices = new();
         // Maps to a segment of linear code. Each opcode is paired with an
         // "address", an incrementing integer.
-        private readonly Dictionary<IPState, List<(int, MetaOpcode)>> processedStates = new();
+        private readonly Dictionary<IPState, List<MetaOpcode>> processedStates = new();
         // Maps each command slot to an index in a depth-first order from the
         // entry point.
         private readonly Dictionary<int, int> commandSlotIndices = new();
@@ -68,17 +68,23 @@ namespace HexagonySearch
             };
 
             CompileSegment(ip);
+            NormalizeLoops();
 
             scaffold = new(program.ToArray(), commandIndices.ToArray());
             return scaffold;
         }
 
-        private List<(int, MetaOpcode)> CompileSegment(IPState initialIP, bool skip = false)
+        private void NormalizeLoops()
+        {
+            
+        }
+
+        private List<MetaOpcode> CompileSegment(IPState initialIP, bool skip = false)
         {
             if (processedStates.ContainsKey(initialIP))
                 return processedStates[initialIP];
 
-            List<(int, MetaOpcode)> segment = new();
+            List<MetaOpcode> segment = new();
             processedStates[initialIP] = segment;
 
             Dictionary<IPState, int> visitedIPStates = new();
@@ -101,10 +107,11 @@ namespace HexagonySearch
                     int address = nextAddress++;
                     Jump jump = new Jump
                     {
+                        Address = address,
                         Target = target
                     };
                     RegisterJump(address, target);
-                    segment.Add((address, jump));
+                    segment.Add(jump);
                     return segment;
                 }
 
@@ -119,7 +126,7 @@ namespace HexagonySearch
                     case '.':
                         break;
                     case '@':
-                        segment.Add((nextAddress++, new Exit()));
+                        segment.Add(new Exit() { Address = nextAddress++ });
                         return segment;
                     case '/':
                         ip.Direction = ip.Direction.ReflectAtSlash();
@@ -221,12 +228,13 @@ namespace HexagonySearch
                             commandSlotIndices[opCode] = index;
                         }
 
+                        int address = nextAddress++;
                         CommandSlot cmdSlot = new CommandSlot
                         {
+                            Address = address,
                             Index = index,
                         };
-                        int address = nextAddress++;
-                        segment.Add((address, cmdSlot));
+                        segment.Add(cmdSlot);
                         visitedIPStates[ip] = address;
                         ip.MemoryState = MemoryState.Unknown;
                         break;
@@ -247,31 +255,32 @@ namespace HexagonySearch
             sources.Add(from);
         }
 
-        private (int, Branch) CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
+        private Branch CompileBranch(IPState positive, IPState nonPositive, bool skip = false)
         {
             int address = nextAddress++;
 
             positive.MemoryState = MemoryState.Positive;
             nonPositive.MemoryState = MemoryState.NonPositive;
 
-            if (!processedStates.TryGetValue(positive, out List<(int address, MetaOpcode)>? positiveSegment))
+            if (!processedStates.TryGetValue(positive, out List<MetaOpcode>? positiveSegment))
             {
                 positiveSegment = CompileSegment(positive, skip);
             }
 
-            if (!processedStates.TryGetValue(nonPositive, out List<(int address, MetaOpcode)>? nonPositiveSegment))
+            if (!processedStates.TryGetValue(nonPositive, out List<MetaOpcode>? nonPositiveSegment))
             {
                 nonPositiveSegment = CompileSegment(nonPositive, skip);
             }
 
             Branch branch = new Branch
             {
-                TargetIfPositive = positiveSegment[0].address,
-                TargetIfNotPositive = nonPositiveSegment[0].address,
+                Address = address,
+                TargetIfPositive = positiveSegment[0].Address,
+                TargetIfNotPositive = nonPositiveSegment[0].Address,
             };
             RegisterJump(address, branch.TargetIfPositive);
             RegisterJump(address, branch.TargetIfNotPositive);
-            return (address, branch);
+            return branch;
         }
 
         private IPState[] HandleEdges(IPState ip)
