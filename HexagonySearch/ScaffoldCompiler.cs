@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.SymbolStore;
 using System.Linq;
 using System.Text;
 using Hexagony;
@@ -48,7 +49,7 @@ namespace HexagonySearch
         // entry point.
         private readonly Dictionary<int, int> commandSlotIndices = new();
         // For each opcode, this contains a set of branches and jumps pointing at it.
-        private readonly Dictionary<int, HashSet<int>> inverseJumps = new();
+        private readonly Dictionary<MetaOpcode, HashSet<MetaOpcode>> inverseJumps = new();
         private int nextAddress = 0;
 
         public ScaffoldCompiler(string source)
@@ -106,18 +107,21 @@ namespace HexagonySearch
                 // The way we construct the segments, it shouldn't really be possible
                 // to end in a jump that goes outside of the segment, but better safe
                 // than sorry.
-                if (jump.Target < segment[0].Address || jump.Target > jump.Address)
+                if (jump.Target.Address < segment[0].Address || jump.Target.Address > jump.Address)
                     continue;
 
-                int linearLength = jump.Target - segment[0].Address;
+                // TODO: Start loop as early as possible. E.g. if we had a segment
+                // that's 12342 which then jumps back to the 3, we could shorten this
+                // to 1234 with a jump back to 2.
+
+                int linearLength = jump.Target.Address - segment[0].Address;
                 if (linearLength > 0)
                 {
                     List<MetaOpcode> linearSegment = segment.Take(linearLength).ToList();
                     segment.RemoveRange(0, linearLength);
-                    linearSegment.Add(new Jump
+                    linearSegment.Add(new Jump(segment[0])
                     {
                         Address = -1, // ???
-                        Target = segment[0].Address,
                     });
                     segments.Insert(i, linearSegment);
                     ++i;
@@ -133,15 +137,15 @@ namespace HexagonySearch
                     {
                         if (sourceSegment[^1] is Branch sourceBranch)
                         {
-                            if (sourceBranch.TargetIfPositive == jump.Address)
-                                sourceSegment[^1] = sourceBranch = sourceBranch with { TargetIfPositive = jump.Target };
-                            if (sourceBranch.TargetIfNotPositive == jump.Address)
-                                sourceSegment[^1] = sourceBranch with { TargetIfNotPositive = jump.Target };
+                            if (sourceBranch.TargetIfPositive == jump)
+                                sourceBranch.TargetIfPositive = jump.Target;
+                            if (sourceBranch.TargetIfNotPositive == jump)
+                                sourceBranch.TargetIfNotPositive = jump.Target;
                         }
                         else if (sourceSegment[^1] is Jump sourceJump)
                         {
-                            if (sourceJump.Target == jump.Address)
-                                sourceSegment[^1] = sourceJump with { Target = jump.Target };
+                            if (sourceJump.Target == jump)
+                                sourceJump.Target = jump.Target;
                         }
                     }
 
@@ -193,15 +197,15 @@ namespace HexagonySearch
 
                 ip = newIPs[0];
 
-                if (visitedIPStates.TryGetValue(ip, out int target))
+                if (visitedIPStates.TryGetValue(ip, out int targetAddress))
                 {
+                    MetaOpcode target = addressLookup[targetAddress];
                     int address = nextAddress++;
-                    Jump jump = new Jump
+                    Jump jump = new(target)
                     {
                         Address = address,
-                        Target = target
                     };
-                    RegisterJump(address, target);
+                    RegisterJump(jump, target);
                     segment.Add(jump);
                     return segment;
                 }
@@ -239,7 +243,7 @@ namespace HexagonySearch
                     case '<':
                         if (ip.Direction == Direction.East)
                         {
-                            IPState positiveIP = new IPState
+                            IPState positiveIP = new()
                             {
                                 Position = ip.Position + Direction.SouthEast.Vector(),
                                 Direction = Direction.SouthEast,
@@ -248,7 +252,7 @@ namespace HexagonySearch
 
                             positiveIP = HandleEdges(positiveIP)[0];
 
-                            IPState nonPositiveIP = new IPState
+                            IPState nonPositiveIP = new()
                             {
                                 Position = ip.Position + Direction.NorthEast.Vector(),
                                 Direction = Direction.NorthEast,
@@ -278,7 +282,7 @@ namespace HexagonySearch
                     case '>':
                         if (ip.Direction == Direction.West)
                         {
-                            IPState positiveIP = new IPState
+                            IPState positiveIP = new()
                             {
                                 Position = ip.Position + Direction.NorthWest.Vector(),
                                 Direction = Direction.NorthWest,
@@ -287,7 +291,7 @@ namespace HexagonySearch
 
                             positiveIP = HandleEdges(positiveIP)[0];
 
-                            IPState nonPositiveIP = new IPState
+                            IPState nonPositiveIP = new()
                             {
                                 Position = ip.Position + Direction.SouthWest.Vector(),
                                 Direction = Direction.SouthWest,
@@ -322,7 +326,7 @@ namespace HexagonySearch
                         }
 
                         int address = nextAddress++;
-                        CommandSlot cmdSlot = new CommandSlot
+                        CommandSlot cmdSlot = new()
                         {
                             Address = address,
                             Index = index,
@@ -337,11 +341,11 @@ namespace HexagonySearch
             }
         }
 
-        private void RegisterJump(int from, int to)
+        private void RegisterJump(MetaOpcode from, MetaOpcode to)
         {
-            if (!inverseJumps.TryGetValue(to, out HashSet<int>? sources))
+            if (!inverseJumps.TryGetValue(to, out HashSet<MetaOpcode>? sources))
             {
-                sources = inverseJumps[to] = new HashSet<int>();
+                sources = inverseJumps[to] = new HashSet<MetaOpcode>();
             }
 
             sources.Add(from);
@@ -364,14 +368,12 @@ namespace HexagonySearch
                 nonPositiveSegment = CompileSegment(nonPositive, skip);
             }
 
-            Branch branch = new Branch
+            Branch branch = new(positiveSegment[0], nonPositiveSegment[0])
             {
                 Address = address,
-                TargetIfPositive = positiveSegment[0].Address,
-                TargetIfNotPositive = nonPositiveSegment[0].Address,
             };
-            RegisterJump(address, branch.TargetIfPositive);
-            RegisterJump(address, branch.TargetIfNotPositive);
+            RegisterJump(branch, branch.TargetIfPositive);
+            RegisterJump(branch, branch.TargetIfNotPositive);
             return branch;
         }
 

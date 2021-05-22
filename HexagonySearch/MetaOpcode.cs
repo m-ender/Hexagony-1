@@ -2,18 +2,18 @@
 
 namespace HexagonySearch
 {
-    public record MetaOpcode
+    public class MetaOpcode
     {
         public int Address { get; init; }
     }
 
-    public record Exit : MetaOpcode
+    public class Exit : MetaOpcode
     {
         public override string ToString()
               => "@";
     }
 
-    public record CommandSlot : MetaOpcode
+    public class CommandSlot : MetaOpcode
     {
         public int Index { get; init; }
 
@@ -21,26 +21,37 @@ namespace HexagonySearch
             => $"_{Index}";
     }
 
-    public record Loop : MetaOpcode
+    public class Loop : MetaOpcode
     {
         public override string ToString()
             => "loop";
     }
 
-    public record Jump : MetaOpcode
+    public class Jump : MetaOpcode
     {
-        public int Target { get; init; }
+        public MetaOpcode Target { get; set; }
+
+        public Jump(MetaOpcode target)
+        {
+            Target = target;
+        }
 
         public override string ToString()
-            => $">{Target}";
+            => $">{Target.Address}";
     }
 
-    public record Branch : MetaOpcode
+    public class Branch : MetaOpcode
     {
-        public int TargetIfPositive { get; init; }
-        public int TargetIfNotPositive { get; init; }
+        public MetaOpcode TargetIfPositive { get; set; }
+        public MetaOpcode TargetIfNotPositive { get; set; }
+
+        public Branch(MetaOpcode targetIfPositive, MetaOpcode targetIfNotPositive)
+        {
+            TargetIfPositive = targetIfPositive;
+            TargetIfNotPositive = targetIfNotPositive;
+        }
 
         public override string ToString()
-            => $">?{TargetIfPositive}:{TargetIfNotPositive}";
+            => $">?{TargetIfPositive.Address}:{TargetIfNotPositive.Address}";
     }
 }
